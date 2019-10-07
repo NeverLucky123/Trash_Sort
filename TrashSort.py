@@ -1,4 +1,6 @@
 import os
+
+base_dir = '/Users/henry/Desktop/Trash_Dataset/'
 # Directory with our training horse pictures
 trash_dir = os.path.join('/Users/henry/Desktop/Trash_Dataset/Trash')
 # Directory with our training horse pictures
@@ -6,53 +8,48 @@ recycle_dir = os.path.join('/Users/henry/Desktop/Trash_Dataset/Recycling')
 # Directory with our training horse pictures
 compost_dir = os.path.join('/Users/henry/Desktop/Trash_Dataset/Compost')
 
-import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.applications.inception_v3 import InceptionV3, preprocess_input
+from tensorflow.keras.applications.xception import Xception, preprocess_input
 
-model = tf.keras.models.Sequential([
-    # Note the input shape is the desired size of the image 300x300 with 3 bytes color
-    # This is the first convolution
-    tf.keras.layers.Conv2D(16, (3,3), activation='relu', input_shape=(300, 300, 3)),
-    tf.keras.layers.MaxPooling2D(2, 2),
-    # The second convolution
-    tf.keras.layers.Conv2D(32, (3,3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2,2),
-    # The third convolution
-    tf.keras.layers.Conv2D(64, (3,3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2,2),
-    # Flatten the results to feed into a DNN
-    tf.keras.layers.Flatten(),
-    # 512 neuron hidden layer
-    tf.keras.layers.Dense(512, activation='relu'),
-    # Only 1 output neuron. It will contain a value from 0-1 where 0 for 1 class ('horses') and 1 for the other ('humans')
-    tf.keras.layers.Dense(3, activation='softmax')
-])
-adam=tf.train.AdamOptimizer(learning_rate=0.0003)
+CLASSES = 3
+base_model = Xception(weights='imagenet', include_top=False)
+x = base_model.output
+x = GlobalAveragePooling2D(name='avg_pool')(x)
+x = Dropout(0.1)(x)
+predictions = Dense(CLASSES, activation='softmax')(x)
+model = Model(inputs=base_model.input, outputs=predictions)
+
+# transfer learning
+for layer in base_model.layers:
+    layer.trainable = False
+
 model.compile(loss='categorical_crossentropy',
-              optimizer='adadelta',
+              optimizer='adam',
               metrics=['acc'])
 
 # All images will be rescaled by 1./255
-train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1/255,
-                                                                shear_range=0.2,
-                                                                zoom_range=0.2,
-                                                                horizontal_flip=True,
-                                                                validation_split=0.2
-                                                                )
+train_datagen = ImageDataGenerator(rescale=1/255,
+                                   shear_range=0.2,
+                                   zoom_range=0.2,
+                                   horizontal_flip=True,
+                                   validation_split=0.2
+                                   )
 # Flow training images in batches of 128 using train_datagen generator
 train_generator = train_datagen.flow_from_directory(
-        '/Users/henry/Desktop/Trash_Dataset/',  # This is the source directory for training images
-        target_size=(300, 300),  # All images will be resized to 150x150
+        base_dir,  # This is the source directory for training images
+        target_size=(299, 299),   # All images will be resized to 299x299 to match the NN
         batch_size=128,
-        # Since we use binary_crossentropy loss, we need binary labels
         class_mode='categorical',
         subset='training')
 
-# Flow training images in batches of 128 using train_datagen generator
+# Flow training images in batches of 32 using train_datagen generator
 validation_generator = train_datagen.flow_from_directory(
-        '/Users/henry/Desktop/Trash_Dataset/',  # This is the source directory for training images
-        target_size=(300, 300),  # All images will be resized to 150x150
+        base_dir,  # This is the source directory for validation images
+        target_size=(299, 299),  # All images will be resized to 299x299 to match the NN
         batch_size=32,
-        # Since we use binary_crossentropy loss, we need binary labels
         class_mode='categorical',
         subset='validation')
 
@@ -63,16 +60,3 @@ history = model.fit_generator(
       verbose=1,
       validation_data=validation_generator,
       validation_steps=8)
-# #"C:\Users\henry\Desktop\hoh training\horses\horse01-0.png"
-# import numpy as np
-# img = tf.keras.preprocessing.image.load_img('/Users/henry/Desktop/hoh training/horses/horse01-0.png', target_size=(300, 300))
-# x = tf.keras.preprocessing.image.img_to_array(img)
-# x = np.expand_dims(x, axis=0)
-#
-# images = np.vstack([x])
-# classes = model.predict(images, batch_size=10)
-# print(classes[0])
-# if classes[0] > 0.5:
-#     print(" is a human")
-# else:
-#     print(" is a horse")
